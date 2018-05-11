@@ -44,6 +44,9 @@
 \newcommand{\st}{\mbox{ s.t. }}
 \newcommand{\wrt}{\mbox{ w.r.t. }}
 \newcommand{\etal}{\mbox{ et al. }}
+\newcommand{\lfi}{\mbox{ LF1 }}
+\newcommand{\lfii}{\mbox{ LF2 }}
+\newcommand{\lfiii}{\mbox{ LF3 }}
 
 %This should be the last package before \input{Version.tex}
 \PassOptionsToPackage{hyphens}{url}\usepackage{hyperref}
@@ -130,10 +133,32 @@ The platform subsequently trains and evaluates the model in each those of config
 % ------------------------------------------
 \section{Introduction}\label{sec:introduction}
 Machine learning models typically involve some number of hyperparameters.
-To tune the model, it is necessary to train it over some `configuration space' of these hyperparameters in order to determine their optimal setting.
-There are existing web solutions for viewing the performance of an experiment given some configuration of its hyperparameters, but these services leave it to the end user to actually train the model using their own compute resources.
+To tune a model, it is necessary to train and evaluate it over some `configuration space' of these hyperparameters in order to determine their optimal setting.
 
-We call the $n$ configurable hyperparameters of a ML model, or `experiment', $\param_i$ for $i \in [n]\}$.
+We call the process of training and evaluating a model for a fixed configuration of that model's hyperparameters `running an experiment'.
+Tuning the model therefore is the process of `running an experiment' for each configuration of hyperparameters one wishes to evaluate and determining which configuration yields the most desireable results for that model (\eg minimizing its loss function, or maximizing its accuracy).
+
+\subsection{Problem Statement} \label{ch:problem_statement}
+There are existing web solutions for viewing the performance of an experiment given some configuration of its hyperparameters, but these services leave it to the end user to actually train the model using their own compute resources.
+This is a nontrivial task, since running a single experiment often involves considerable compute resources, and the end user needs to run experiments for each configuration he wishes to evaluate.
+
+\subsection{Proposal} \label{ch:problem_statement}
+We therefore sought to implement a service that automates the process of running experiments for each configuration using cloud computing resources.
+The user defines the set of `valid configurations' which are all of those configurations of a model's hyperparameters he wishes to evaluate; the service subsequently runs experiments for all of those configurations in the cloud.
+
+\subsection{Motivation} \label{ch:motivation}
+Such a service would free the end user from having to concern himself with the logistical and computational issues associated with running a large number of experiments in order to tune his model.
+Since the end user is often a data scientist for whom the logistics of \textit{how} the model is trained are outside the scope of his work, freeing him of such concerns allows the end user to focus exclusively on the actual design and tuning of the model.
+
+\subsection{Related Work} \label{ch:previous}
+\href{https://comet.ml/}{Comet.ml} and \href{https://neptune.ml/}{Nuptune.ml} are two web services which facilitate the running of machine learning experiments with a web frontend that allows for experiment tracking and hyperparameter optimization.
+They leave the actual training and testing of the ML experiments to the end user, \ie the end user must configure his computing resources to train and test the model himself.
+Our service seeks to simplify the actual running of these experiments, and could potentially integrate with these services in the future.
+
+% -------------- RESULTS --------------
+% -------------------------------------
+\section{Results} \label{ch:results}
+We call the $n$ configurable hyperparameters of an ML model, or `experiment', $\param_i$ for $i \in [n]\}$.
 The set of possible configurations of the model is then given by the cross of these hyperparameters, \ie
 \[
 C = \param_1 \times \param_2 \times \cdots \times \param_n
@@ -160,19 +185,29 @@ C = \{(a, 1), (a, 2), (b, 1), (b, 2)\}
 
 This is the system we implemented in our service to allow the end user to define the configuration space for each of his experiments.
 
-\subsection{Problem Statement} \label{ch:problem_statement}
+\subsection{Solution Workflow}
+We call a user of the service Alice.
 
-\subsection{Motivation} \label{ch:motivation}
-bla bla \textit{Such an open system would resolve, or atleast mitigate, the spoofed reviews issue.}
+Alice connects to the frontend, logs in, and creates a new experiment with a project name $P$.
+To create the experiment, she uploads some code $C$ for her model, from which the frontend parses and detects the model's hyperparameters $\param_i$.
+Alice then programmatically specifies the set of valid options $O$ for each $\param_i$, \eg $\param_1 \in range(1, 5)$.
 
-\subsection{Related Work} \label{ch:previous}
-\href{https://comet.ml/}{Comet.ml} and \href{https://neptune.ml/}{Nuptune.ml} are two web services which facilitate the running of machine learning experiments with a web frontend that allows for experiment tracking and hyperparameter optimization.
-They leave the actual training and testing of the ML experiments to the end user, \ie the end user must configure his computing resources to train and test the model himself.
-Our service seeks to simplify the actual running of these experiments, and could potentially integrate with these services in the future.
+The frontend then sends $P$, $C$, $O$ and Alice's username $U$ to the lambda function \lfi using API Gateway.
 
-% -------------- RESULTS --------------
-% -------------------------------------
-\section{Results} \label{ch:results}
+In \lfi, the set of configurations is infered from $O$ in the manner just described (\ie as the cross of the valid options for each $\param$).
+\lfi subsequently creates a docker container containing the code $C$ and environment variables containing the parameter settings for each configuration.
+It uploads this container to S3 under a key $K$, records loggin information for this $P$, $C$, $O$, and $U$ in a DynamoDB table.
+Finally \lfi pushes a message $M$ = ($P$, $K$, `New Version') to SQS containing the location of the container in S3 and the project id for the experiment.
+
+To run her experiments, Alice goes to the `runs' page of the service, which sends the $P$ and $K$ associated with a particular run to the lambda function \lfiii.
+
+\lfiii pushes a message $M$ = ($P$, $K$, `Run') to SQS specifying the details of the runs Alice has selected.
+
+Periodically, another lambda function \lfii checks the SQS queue for unconsumed messages.
+This lambda handles creating new ElasticBeanstalk instances for experiments and running them upon request.
+For messages matching ($P$, $K$, 'New Version'), it creates a new ElasticBeanstalk Application Version for that $P$ using the docker container found in S3 under key $K$.
+For messages matching ($P$, $K$, 'Run'), it runs the ElasticBeanstalk Application Version associated with that $P$ and $K$.
+
 \subsection{Solution Architecture}
 The general architecture for our application was very similar to the one used for the three class assignments throughout the semester,
 \ie a web frontend written in React that connected to a variety of microservices through AWS API Gateway.
@@ -183,13 +218,14 @@ Authentication for API gateway was handled using AWS IAM and Cognito, which we i
 API gateway routed to three lambda functions which used a variety of other AWS services:
 
 \begin{itemize}
-  \item SQS -- Used to manage the runs and new EB version creation for each experiment
-  \item S3 -- Saved the docker containers we generated for each configuration of the models (and optionally hosted the frontend)
   \item Elastic Beanstalk -- Used to train and evaluate each model configuration as present in its respective docker container
+  \item SQS -- Used to manage the runs and create new AWS EB versions for each experiment and configuration
+Used to handle communication and task queueing between \lfi, \lfii, and \lfiii.
+  \item S3 -- Saved the docker containers we generated for each configuration of each experiment (and optionally hosted the frontend)
   \item Cloudwatch -- Used to schedule lambda functions which periodically pulled runs from SQS and executed them on AWS EB
 \end{itemize}
 
-\subsection{Implementation Details} \label{ch:solidity_work}
+\subsection{Implementation Details} \label{ch:implementation}
 
 \end{multicols}
 \subsubsection{Frontend}
@@ -233,7 +269,7 @@ This paper was produced as part of Sambit Sahu's Spring 2018
 \textit{Cloud Computing and Big Data} Course at Columbia University (\url{http://www.cs.columbia.edu/~sambits/})
 
 \section{Availability}
-The source of this paper is maintained at \url{https://github.com/jmstenger/ml-runner-paper/}.
+The source of this paper is maintained at \url{https://github.com/6998/ml-runner-paper/}.
 All project code can be found under the 6998 Organization at \url{https://github.com/6998}.
 See \ref{ch:code} for a walkthrough of the code.
 
