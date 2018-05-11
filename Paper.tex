@@ -25,6 +25,8 @@
 %,pagebackref=true
 \usepackage{tabu} %requires array.
 
+\def\param{\lambda}
+\def\reals{\mathbb{R}}
 \def\file{\mathcal{F}}
 \def\filehash{\sigma_F}
 \def\key{K}
@@ -95,7 +97,7 @@
 % Summary/Conclusion
 % Code Documentation
 
-\title{ML-Runner: A Scalable Cloud System for Machine \& Distributed Learning} %\\ {\smaller \textbf{Project Report \YellowPaperVersionNumber}}}
+\title{ML-Runner: A Scalable Cloud Service for Machine \& Distributed Learning} %\\ {\smaller \textbf{Project Report \YellowPaperVersionNumber}}}
 \author{
     Barak Ben Noon (bb2762@columbia.edu) \\
     James Maxwell Stenger (jms2431@columbia.edu)
@@ -127,10 +129,39 @@ The platform subsequently trains and evaluates the model in each those of config
 % -------------- INTRODUCTION --------------
 % ------------------------------------------
 \section{Introduction}\label{sec:introduction}
-Machine learning models typically involve some number of configurable hyperparameters which we call $\lambda = \{ \lambda_i \}$.
-Among the valid op
+Machine learning models typically involve some number of hyperparameters.
+To tune the model, it is necessary to train it over some `configuration space' of these hyperparameters in order to determine their optimal setting.
+There are existing web solutions for viewing the performance of an experiment given some configuration of its hyperparameters, but these services leave it to the end user to actually train the model using their own compute resources.
+
+We call the $n$ configurable hyperparameters of a ML model, or `experiment', $\param_i$ for $i \in [n]\}$.
+The set of possible configurations of the model is then given by the cross of these hyperparameters, \ie
+\[
+C = \param_1 \times \param_2 \times \cdots \times \param_n
+\]
+
+If the space of some parameters is large or infinite, \eg $\param_i \in \reals$, this of course implies the space of valid configurations for the model is also infinite.
+However, for such hyperparameters, the end user can easily define some set of values which he wishes to test, \eg $\lambda_i = \{ 10^i | i \in range(1, 10)\}$.
+
+The simplest way to obtain the set of configurations which the end user wants to train and evaluate his model on is therefore to have him quickly and programmatically define the space of valid settings for each of his model's hyperparameters.
+We can then infer the configurations as the cross of these valid settings.
+
+For instance, if a model consists of 2 hyperparameters, and the end user indicates:
+
+\begin{eqnarray}
+\param_1 \in [\text{`a'}, \text{`b'}] \\
+\param_2 \in [1, 2]
+\end{eqnarray}
+
+We can then define the set of configurations on which to train and evaluate the model on as:
+
+\[
+C = \{(a, 1), (a, 2), (b, 1), (b, 2)\}
+\]
+
+This is the system we implemented in our service to allow the end user to define the configuration space for each of his experiments.
 
 \subsection{Problem Statement} \label{ch:problem_statement}
+
 \subsection{Motivation} \label{ch:motivation}
 bla bla \textit{Such an open system would resolve, or atleast mitigate, the spoofed reviews issue.}
 
