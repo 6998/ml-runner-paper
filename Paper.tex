@@ -196,7 +196,7 @@ The frontend then sends $P$, $C$, $O$ and Alice's username $U$ to the lambda fun
 
 In \lfi, the set of configurations is infered from $O$ in the manner just described (\ie as the cross of the valid options for each $\param$).
 \lfi subsequently creates a docker container containing the code $C$ and environment variables containing the parameter settings for each configuration.
-It uploads this container to S3 under a key $K$, records loggin information for this $P$, $C$, $O$, and $U$ in a DynamoDB table.
+It uploads this container to S3 under a key $K$ and records loggin information for this $P$, $C$, $O$, and $U$ in a DynamoDB table.
 Finally \lfi pushes a message $M$ = ($P$, $K$, `New Version') to SQS containing the location of the container in S3 and the project id for the experiment.
 
 To run her experiments, Alice goes to the `runs' page of the service, which sends the $P$ and $K$ associated with a particular run to the lambda function \lfiii.
@@ -737,14 +737,6 @@ exports.handler = (event, context, callback) => {
   });
 };
 \end{Verbatim}
-
-% -------------- TERMINOLOGY --------------
-% -----------------------------------------
-\section{Terminology} \label{ch:Terminology}
-
-\begin{description}
-\item[address] triple abc
-\end{description}
 
 \appendix
 \end{document}
