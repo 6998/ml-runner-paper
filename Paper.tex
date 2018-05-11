@@ -1,0 +1,589 @@
+\documentclass[12pt,oneside]{amsart}
+%\usepackage{tweaklist}
+\usepackage{cancel}
+\usepackage{xspace}
+\usepackage{graphicx}
+\usepackage{multicol}
+\usepackage{subfig}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[a4paper,width=170mm,top=18mm,bottom=22mm,includeheadfoot]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{verbatim}
+\usepackage{caption}
+\usepackage{natbib}
+\usepackage{float}
+\usepackage{pdflscape}
+\usepackage{mathtools}
+\usepackage{cuted}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{afterpage}
+\usepackage{tikz}
+\usepackage{fancyvrb}
+\usepackage[bookmarks=true, unicode=true, pdftitle={Ethereum Yellow Paper: a formal specification of Ethereum, a programmable blockchain}, pdfauthor={Dr. Gavin Wood},pdfkeywords={Ethereum, Yellow Paper, blockchain, virtual machine, cryptography, decentralised, singleton, transaction, generalised},pdfborder={0 0 0.5 [1 3]}]{hyperref}
+%,pagebackref=true
+\usepackage{tabu} %requires array.
+
+\def\file{\mathcal{F}}
+\def\filehash{\sigma_F}
+\def\key{K}
+\def\keyhash{\sigma_K}
+\def\hash{sha3}
+\def\alice{\mathcal{A}}
+\def\bob{\mathcal{B}}
+\def\ether{\xi}
+\def\zksnark{\zeta}
+\def\encrypt{\varepsilon}
+\def\decrypt{\delta}
+\def\crp{\textit{Content Release Problem} }
+\def\olp{\textit{Ownership Ledger Problem} }
+\def\nb{\textbf{NB:} }
+\newcommand{\st}{\mbox{ s.t. }}
+\newcommand{\wrt}{\mbox{ w.r.t. }}
+
+%This should be the last package before \input{Version.tex}
+\PassOptionsToPackage{hyphens}{url}\usepackage{hyperref}
+% "hyperref loads the url package internally. Use \PassOptionsToPackage{hyphens}{url}\usepackage{hyperref} to pass the option to the url package when it is loaded by hyperref. This avoids any package option clashes." Source: <https://tex.stackexchange.com/questions/3033/forcing-linebreaks-in-url/3034#comment44478_3034>.
+% Note also this: "If the \PassOptionsToPackage{hyphens}{url} approach does not work, maybe it's "because you're trying to load the url package with a specific option, but it's being loaded by one of your packages before that with a different set of options. Try loading the url package earlier than the package that requires it. If it's loaded by the document class, try using \RequirePackage[hyphens]{url} before the document class." Source: <https://tex.stackexchange.com/questions/3033/forcing-linebreaks-in-url/3034#comment555944_3034>.
+% For more information on using the hyperref package, refer to e.g. https://en.wikibooks.org/w/index.php?title=LaTeX/Hyperlinks&stable=0#Hyperlink_and_Hypertarget.
+
+\makeatletter
+\newcommand{\linkdest}[1]{\Hy@raisedlink{\hypertarget{#1}{}}}
+\makeatother
+\usepackage{seqsplit}
+
+% For formatting
+%\usepackage{underscore}
+%\usepackage{lipsum} % to generate filler text for testing of document rendering
+\usepackage[english]{babel}
+\usepackage[autostyle]{csquotes}
+\MakeOuterQuote{"}
+
+\usepackage[final]{microtype} % https://tex.stackexchange.com/questions/75140/is-it-possible-to-make-latex-mark-overfull-boxes-in-the-output#comment382776_75142
+
+\input{Version.tex}
+% Default rendering options
+\definecolor{pagecolor}{rgb}{1,0.98,0.9}
+\def\YellowPaperVersionNumber{unknown revision}
+\IfFileExists{Options.tex}{\input{Options.tex}}
+
+\newcommand{\hcancel}[1]{%
+    \tikz[baseline=(tocancel.base)]{
+        \node[inner sep=0pt,outer sep=0pt] (tocancel) {#1};
+        \draw[black] (tocancel.south west) -- (tocancel.north east);
+    }%
+}%
+
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\newcommand*\eg{e.g.\@\xspace}
+\newcommand*\Eg{e.g.\@\xspace}
+\newcommand*\ie{i.e.\@\xspace}
+%\renewcommand{\itemhook}{\setlength{\topsep}{0pt}  \setlength{\itemsep}{0pt}\setlength{\leftmargin}{15pt}}
+
+\title{Bizaar [sic]: A Decentralised Content Store\\ {\smaller \textbf{Progress Report \YellowPaperVersionNumber}}}
+\author{
+    James Maxwell Stenger\\
+    james.m.stenger@columbia.edu
+}
+\begin{document}
+
+\pagecolor{pagecolor}
+
+\begin{abstract}
+At present, digital content distribution and licensing takes place through channels including the Apple App Store, Google Play, the Windows Store, Steam, etc.
+These distribution platforms typically collect $\sim$30\% of revenues from content owners.
+Our contention is that such services can be provided with similar technical characteristics (sans marketing exposure) for a fraction of the cost through the creation of a distributed digital content store on e.g. the Ethereum network.
+
+A number of issues or special considerations come up in the design of such a system; for instance, how to deal with DRM and proof-of-ownership (verifying that the uploader of content is also its author).
+We further contend that even assuming the worst case--that such issues are irresolvable without a central authority curating the store, as exists in the present paradigm--there would still be utility to such a decentralized content store, or services with characteristics similar to those in the system we outline here.
+This can be seen clearly through, for instance, the persistence of services such as Patreon which processed some \$150 million in contributions to creators in 2017, or Twitch, a streaming website whose streamers frequently receive large donations, both of which operate on a good-faith assumption between "licensees," or donators, and content creators.
+Existing blockchain currency solutions cearly provide a decentralized and trustless implementation of these services' payment architecture; the solution we outline here attempts to implement off-chain content "sharing" or licensing in as trustless and decentralized a fashion as possible.
+Here too we note opportunities for cost savings, as Twitch collects 50\% of monthly subscription fees and Patreon collects 5\% of monthly donations, on top of payment processors' standard $\sim$3\%.
+\end{abstract}
+
+\maketitle
+
+\setlength{\columnsep}{20pt}
+\begin{multicols}{2}
+
+\section{Introduction}\label{sec:introduction}
+
+Blockchains with cryptographically-secured transactions allow for the creation of scarce digital goods.
+Bitcoin, the longest running blockchain at the time of writing, first explored this new capability with the creation of the bitcoin token.
+Ultimately, Bitcoin and the blockchain projects which have followed it operate in the paradigm of a transactional singleton machine with shared-state: the network protocol reaches consensus in a distributed fashion, but every transaction is serially executed on every constituent node in the network to arrive at the chain's final state.
+
+The Ethereum project generalized this paradigm by providing the capacity to store Turing-complete code, or "smart contracts" on the blockchain, and call into such contracts transactionally.
+This opened up the possibility of the creation of additional tokens, as well as decentralized autonomous organizations (DAOs), democratic organizations, etc., all on top of the overarching Ethereum chain.
+As Gavin Wood explains in the Ethereum Yellowpaper, "Ethereum is a project which attempts to build the generalized technology; technology on which all transaction-based state machine concepts may be built. Moreover it aims to provide to the end-developer a tightly integrated end-to-end system for building software on a hitherto unexplored compute paradigm in the mainstream: a trustful object messaging compute framework."
+
+In short, the Ethereum network provides us with a framework for creating distributed application that can act as a trustless, uncensorable digital content store.
+
+\subsection{Motivation} \label{ch:motivation}
+
+\textit{Currently, content owners must place their trust in a third party.}
+These third parties (e.g. Apple or Google) are trusted to curate and maintain centralized services such as the App Store.
+In addition to extracting economic rent from their control over these distribution channels (to the tune of some $\sim$30\% of all revenues), the owners of these centralized services also command the ability to ban, censor, or otherwise exclude content creators and individual works at their own discretion.
+
+\textit{An ideal alternative would be a system which is both trustless and uncensorable.}
+A decentralized solution built upon a blockchain inherits the trustless payment properties of its parent chain (e.g. Ethereum).
+If the store is implemented through a smart contract, it is also uncensorable as a consequence of that contract's public presence on the parent chain: anyone can see all transactions with that contract in the parent chain and can therefore evaluate the store's current state after executing all of those transactions.
+This censorship resistance of course extends exactly as far as we expect: the store would not, for instance, resist efforts by third parties to restrict access to fiat gateways for the store's currency or to restrict access to the parent chain protocol, in a similar way to how some institutions attempt to ban torrent P2P traffic.
+
+\textit{Such an open system would resolve, or atleast mitigate, the spoofed reviews issue.}
+To the extent purchases on a chain are public, a distributed content store would provide verifiable review capacity, \ie the opportunity for product reviews to be mapped to individuals with verifiable purchase histories of the product in question and also other products.
+This is not available in existing systems.
+It is easy to see how verifiable purchase histories resolve the issue of "spoofed" product reviews from the product owner, since a "block explorer" for the store could be easily developed which computes a reliability score for each reviewer that is some function of total amount purchased, number of products purchased, etc.
+Content owners would, in such a system, be unable to spoof positive reviews for their product as they are able to with existing systems.
+
+\subsection{Related Work} \label{ch:previous}
+
+\cite{nakamoto2008bitcoin} of course introduced the modern paradigm of a trustless digital cash system organized through a Proof of Work (PoW) consensus mechanism.
+Earlier work had been done by \cite{dwork92pricingvia} and \cite{back2002hashcash}.
+More relevant to our work is \cite{buterin2013ethereum} and \cite{wood2015ethereum}, which describe the inception and specification, respectively, of the Ethereum protocol.
+
+\subsection{Prior Art} \label{ch:previous}
+Prior work on the problem of blockchain powered decentralized storage includes Siacoin and Storj with \cite{wilkinson2016storj}.
+Work on the problem of connecting on-chain smart-contracts with external data feeds in a decentralized manner is being done by e.g. ChainLink with \cite{ellis2017link}.
+
+For a list of terms used in this paper, refer to Appendix \ref{ch:Terminology}.
+
+\section{Results} \label{ch:results}
+
+\subsection{Architecture}
+
+
+To frame the discussion, we consider the general problem of a customer Alice $\equiv \alice$ who wishes to purchase a file $\equiv \file$ from its content owner Bob $\equiv \bob$.
+We assume $\bob$ is willing to grant $\alice$ access to $\file$ in exchange for a sum $S$ of some cryptocurrency, which we take to be ether $\equiv \ether$.
+Following \cite{wood2015ethereum}, we use $T$ to denote an on-chain transaction.
+
+To simplify matters, we take 'granting access to $\file$' to mean access to the raw file, and ignore DRM.
+This is what occurs, for instance, when one purchases music from the App Store.
+Since Alice will have access to the raw file after the exchange, it makes no difference the extent to which she can make that file available to others, since she would be able to seed the raw file or distribute it herself after purchase.
+It therefore suffices to make $\file$ available in encrypted format (e.g. using a 256-bit AES key $K$) on a P2P file sharing service.
+'Granting access to $\file$' therefore reduces to sharing $K$ with $\alice$ (e.g. using RSA public key encryption)
+
+In this general problem, there are thus two basic issues: Authentication and Distribution.
+
+\textbf{Authentication} we take to mean the exchange of (crypto-)currency for digital content usage rights.
+Authentication is thus the problem of trustlessly exchanging $\ether$ for access to $\file$.
+We call the problem of how to implement this trustless exchange the \crp, since it is initially unclear how to represent an off-chain concept such as access to $\file$ in an on-chain transaction.
+
+We might optionally include an additional smart contract which explicitly stores a ledger of file owners and customers with access rights to files which can be called into from some \eg DRM service in order to confirm a given customer $\alice$ has access rights to a particular $\file$.
+From this point of view access rights to each $\file$ are represented by a token for that $\file$; it is easy to see how this can be implemented with a standard ERC-721 Non-Fungible Token (NFT) Contract (\ie each "token" representing access rights to a particular $\file$ is indivisible, or non-fungible).
+We call this problem the \olp and view it as already solved since the creation of NFTs is at this point well understood.
+
+Note that if we solve the \crp, we have implicitly solved the \olp, since if the content-release transactions are on-chain,
+\[
+S = \{ T.sender \st \text{T = exchange of $S\ether$ for $\file$} \}
+\]
+
+Necessarily forms the set of accounts with access rights to $\file$.
+Hence a ledger of content owners is automatically established if the \crp is solved.
+
+\textbf{Distribution} we take to mean the distribution of digital content to those with the rights to use it.
+From the point of view of a decentralized, trustless content store, Distribution is intimately tied together with Authentication, since customers must be cryptographically guaranteed access to their content once their tokens have been irreversibly transferred to content owners.
+As we explained, using our assumptions, 'distributing $\file$' reduces to making the encrypted version of $\file$ publicly available for download.
+
+For the most part, we take this problem to be already solved through such solutions as \cite{wilkinson2016storj}.
+Siacoin and Storj address the problem of storing files in a decentralized peer-to-peer fashion and compensating "seeders" for this service using cryptocurrency in a sustainable cryptoeconomic system.
+In this respect such systems represent sustainable versions of already extant P2P file sharing services such as BitTorrent (BT).
+
+The Storj paradigm is roughly that client encrypts $\file$ client-side and uploads it to the Storj network, which shards the file over the P2P network and makes it available for later download.
+For purposes of our discussion take the P2P storage architecture to be already built and functional, either through Storj or through projects such as \href{https://github.com/ethersphere/swarm}{Ethereum Swarm}, which is building a native base layer content distribution service for the ethereum web3 stack, or \href{https://ipfs.io/}{IPFS}.
+
+\subsection{ZK Snarks}
+
+Our solutions to the problems outlined above rely heavily on ZK-Snarks.
+ZK-Snarks and their capabilities are outlined in \cite{buterin2016quadraticArithmetic} and in Vitalik Buterin's \href{https://youtu.be/pcWEdyBBGrk?t=1h28m28s}{2017 ETH Waterloo Talk}.
+
+The fundamental assumption we make is that it is possible (i.e. reasonably computationally and information-theoretically feasible) to prove to an outside party that you know $X$ \st:
+\[
+F(X) = Y
+\]
+
+where F and Y are public, and X may have secret and public components, \ie X is a tuple of arguments to the function F.
+
+For an intuitive discussion as to why such proofs should be possible, see \href{https://crypto.stackexchange.com/questions/37581/why-are-zk-snarks-possible-in-laymans-terms}{this StackExchange post}.
+
+We assume a symmetric-key encryption scheme \st $\file$ can be encrypted as $\file_e = \encrypt(\file, K)$ and decrypted as $\file = \decrypt(\file_e, K)$ (e.g. 256-bit AES).
+Each file will need its own key $K$ so that it can be shared with $\alice$ without exposing other files.
+We also assume $\alice$ has her own keypair $(PK_A, SK_A)$ to use with an asymmetric key encryption scheme (e.g. 2048-bit RSA).
+
+Finally, we assume the existence of a hash function which outputs 256-bits which we denote $\hash$, as in \cite{wood2015ethereum}.
+For historical reasons, $\hash$ in solidity differs from the final NIST-$\hash$ implementation, since the NIST developed algorithm was not completed before the implementation of the Ethereum protocol.
+In our discussion $\hash$ is precisely the $\hash$ function made available in Solidity, i.e. keccak256() or w3.utils.soliditySha3().
+
+\end{multicols}
+\subsection{Distribution Architecture}
+
+In IPFS, Swarm, and Storj, a file is identified by its hash, which we denote $\sigma_F = \hash(\file)$.
+A content owner $\bob$, to make $\file$ available for distribution and purchase, uploads
+$\file_e = \encrypt(F, K)$,
+$\sigma_F = \hash(F)$,
+$\sigma_K = \hash(K)$,
+and a ZK-Snark $\zksnark_{dist}$ proving that $\sigma_K$ is the hash of the key used to encrypt $\file$ and $\sigma_F$ its hash.
+
+The viability of $\zksnark_{dist}$ is shown by:
+
+\[
+F(K, \file, \file_e, \sigma_F, \sigma_K) =
+  \begin{cases}
+    1 & \file_e == \encrypt(\file, K) \wedge \sigma_K == \hash(K) \wedge \sigma_F == \hash(\file) \\
+    0 & \text{otherwise}
+  \end{cases}
+\]
+
+where Y = 1 and the only private components of X are $K$ and $\file$.
+
+\subsection{Authentication Architecture}
+
+\subsubsection{The \crp}
+
+Consider a smart contract $C$ which provides all on-chain functionality for the store.
+$C$ records store content metadata on the parent chain.
+Content owners can `list' their content in the store by sending into $C$ a uniquely identifiable filehash $\sigma_F = \hash(\file)$, the hash of the key used to encrypt that file $\sigma_K = \hash(K)$, and a price for that content denominated in the store currency.
+
+Because a purchase requires information from both $\alice$ and $\bob$, purchases must take place in two phases.
+
+In the first phase, $\alice$ sends the requisite sum of $S$ $\ether$ into $C$ and the hash of the file in question, $\sigma_F = \hash(\file)$, as well as her public key $PK_A$.
+
+The sum $S$ remains in escrow with C until such time as $\bob$ sends $C$ a $0\ether$ transaction containing $K_e = \encrypt(K, PK_A)$, and
+a ZK-Snark $\zksnark_{auth}$ proving that $\sigma_K$ is the hash of the file key made available to $\alice$ using her public key $PK_A$.
+
+The viability of $\zksnark_{auth}$ is shown by:
+
+\[
+F(K, \sigma_K, K_e) =
+  \begin{cases}
+    1 & K_e == \encrypt(K, PK_A) \wedge \sigma_K == \hash(K) \\
+    0 & \text{otherwise}
+  \end{cases}
+\]
+
+where Y = 1 and the only private component of X is $K$.
+
+\begin{multicols}{2}
+\subsection{Store Guarantees}
+
+Together, $\zksnark_{dist}$ and $\zksnark_{auth}$ prove to $\alice$ that she has been given access to the file identified by $\sigma_F$.
+Crucially, they also allow any outside observer (\ie the smart contract) to verify that this exchange has taken place, and hence her funds must be released and sent to $\bob$ by the contract immediately upon receipt of $\bob$'s information, providing it satisfies the outlined requirements.
+In order to avoid front-running by $\alice$ (\ie she clogs the transaction pool so that $\bob$ publishes the information, making the key available to her, but it is never received by the contract), a timelock can be utilized so that her funds are only ever returned after some appropriate period of time (e.g. several hours or even one day).
+Such a timelock ensures $\bob$ has adequate time to get his transaction accepted into a block and therefore made visible to the contract.
+
+\subsection{Levels of Trust}
+
+\nb \wrt trust, the outlined system still requires that (1) $\alice$ trust or verify through some reputation system that the file associated with $\sigma_F$ is what she wants; the system provides guarantees that what she is being granted access to is the same file anyone else who purchased $\sigma_F$ received access to.
+We do not see how it is possible to provide guarantees as to the actual file contents without compromising the security of the encryption scheme.
+It is easy to see how this is an issue, for instance, by considering $\file$ = $\encrypt(\file', K')$.
+`Granting access to F' therefore amounts to giving the user an encrypted file which they cannot decrypt.
+Even worse: F may be anything at all: even crypto.randomBytes(1024).
+
+The system also requires that (2) $\bob$ trust $\alice$ not to release the key used to encrypt the file, $K$.
+If $\alice$ were to release the key, it would be as bad as $\bob$ uploading his $\file$ to a public P2P filesharing service such as Pirate Bay.
+
+\section{Solidity Work} \label{ch:solidity_work}
+Work on the project involved reading various blockchain protocol papers, including those for Ethereum, Storj, ChainLink and Bitcoin.
+We also needed to learn the solidity language and set up a development environment to work with smart contracts.
+This has involved completing, at a high level, the following tasks:
+
+\begin{itemize}
+  \item Setup \href{http://truffleframework.com/docs/}{Truffle} Development Environment / Testing Framework / Asset Pipeline for Smart Contract Development
+  \item Learn \href{https://solidity.readthedocs.io/en/v0.4.21/}{Solidity} Programming Language and deploy basic contracts through Truffle
+  \item Setup \href{http://truffleframework.com/docs/ganache/using}{Ganache} private test chain on my system for deployment and testing with Truffle
+  \item Compile \& migrate (i.e. deploy) Solidity Contracts to this Ganache test chain
+  \item Learn Truffle's framework for unit testing these contracts with the truffle-artifacts interface
+  \item Install \href{https://metamask.io/}{MetaMask} and configure it to use the private Ganache test chain
+  \item Setup React and Redux Frontend; integrate it with the smart contracts using the Web3 Ethereum API;
+    verify contracts are working as expected and can be accessed directly from a frontend
+  \item Setup \href{http://truffleframework.com/docs/drizzle/getting-started}{Drizzle} Framework to more simply integrate the frontend with the web3 contracts backend.
+  \item Determine appropriate symmetric and asymmetric encryption schemes to use
+  \item Complete implementation of the smart contracts previously outlined
+  \item Deploy the implementation on local testnet and make it accessible through the frontend API that has already been setup
+  \item Complete integration tests and confirm everything is working as expected
+\end{itemize}
+
+The store smart contract was written in Solidity and integration testing was all written in Javascript using the Truffle Framework.
+
+\end{multicols}
+\subsection{Smart Contract Walkthrough}
+
+The basic (edited) code for the store smart contract (excluding functions and events) is shown below:
+
+\begin{Verbatim}[fontsize=\tiny, frame=single]
+contract Store {
+  struct Content {
+    // Essential MetaData
+    address owner;
+    bytes32 keyHash;
+    uint price; // Static Price
+  }
+
+  /* Mapping: filehash -> Content */
+  mapping (bytes32 => Content) private content;
+
+  /* Mapping: address -> (Mapping: filehash -> time deadline) */
+  mapping (address => mapping (bytes32 => uint)) private deadlines;
+
+  /* Constructor */
+  function Store() public {}
+}
+\end{Verbatim}
+
+To make a particular piece of content available for purchase, Bob can run:
+
+\begin{Verbatim}[fontsize=\tiny, frame=single]
+/* Make some Content C available for purchase */
+function listContent(bytes32 fileHash, bytes32 keyHash, uint price) public {
+  // This content must not already exist
+  require(content[fileHash].owner == 0x0);
+
+  content[fileHash].owner = msg.sender;
+  content[fileHash].keyHash = keyHash;
+  content[fileHash].price = price;
+}
+\end{Verbatim}
+
+To begin the escrow process, Alice runs:
+
+\begin{Verbatim}[fontsize=\tiny, frame=single]
+function beginPurchase(bytes32 fileHash, bytes publicKey) public payable {
+    // Ensure this content exists
+    require(content[fileHash].owner != 0x0);
+
+    // Ensure we've payed the correct amount
+    require(msg.value == content[fileHash].price);
+
+    // Ensure we haven't already started purchasing the content
+    require(deadlines[msg.sender][fileHash] == 0);
+
+    // All good; begin purchase
+    deadlines[msg.sender][fileHash] = now + 1 hours;
+    emit BeginPurchase(msg.sender, fileHash, publicKey);
+}
+\end{Verbatim}
+
+If it is past that particular payment's completion deadline, Alice can then retrieve her funds by calling:
+
+\begin{Verbatim}[fontsize=\tiny, frame=single]
+function cancelPurchase(bytes32 fileHash) public {
+  // Ensure we are past the purchase completion deadline
+  require(now >= deadlines[msg.sender][fileHash]);
+
+  deadlines[msg.sender][fileHash] = 0;
+  emit CancelPurchase(msg.sender, fileHash);
+}
+\end{Verbatim}
+
+Otherwise, Bob completes the purchase by sending in the required information:
+
+\begin{Verbatim}[fontsize=\tiny, frame=single]
+function completePurchase(
+  address purchaser,
+  bytes32 fileHash,
+  bytes encryptedKey,
+  bytes zksnark_auth_proof) public {
+
+  // Ensure we are before purchase completion deadline
+  require(now < deadlines[purchaser][fileHash]);
+
+  // Ensure this content exists
+  require(content[fileHash].owner != 0x0);
+
+  // Verify zksnark_auth_proof (to be implemented)
+  require(true);
+
+  deadlines[purchaser][fileHash] == 0;
+  content[fileHash].owner.transfer(content[fileHash].price);
+  emit CompletePurchase(msg.sender, fileHash, encryptedKey);
+}
+\end{Verbatim}
+
+Whenever information does not need to be stored on-chain, the contract emits `events,' which external processes can `listen' for as the chain state evolves.
+These events are significantly less expensive than storing information on-chain; we define them as:
+
+\begin{Verbatim}[fontsize=\tiny, frame=single]
+event BeginPurchase(
+  address purchaser,
+  bytes32 fileHash,
+  bytes publicKey
+);
+
+event CancelPurchase(
+  address purchaser,
+  bytes32 fileHash
+);
+
+event CompletePurchase(
+  address purchaser,
+  bytes32 fileHash,
+  bytes encryptedKey
+);
+\end{Verbatim}
+
+In \ref{ch:future}, we outline how expensive on-chain storage is.
+It therefore might appear wasteful to store Alice's content purchase deadlines in a nested map on-chain.
+Note that these storage costs are only incurred when setting a bit; returning a set bit to the null value (\ie 0) results in a refund of most of the setting costs for that bit.
+This is because it is expensive for every singleton machine maintaining the chain to track an aditional bit of state, and beneficial for them to be able to reduce that state tracking by a bit.
+Since deadlines are ultimately all returned to the null value, we do not view their tracking in this way to be overly burdensome.
+
+\subsection{Frontend \& Metamask}
+We implemented a limited frontend to simply confirm we were able to connect to the local testnet in browser using metamask and make transactions with the Store contract.
+To connect with the testnet, we used the \href{https://metamask.io/}{MetaMask} chrome extension, which allows a browser user to link their ethereum accounts with a particular ethereum network (\ie local, Ropsten Testnet, the Mainnet, etc.).
+
+\begin{multicols}{2}
+\section{Distribution Work} \label{ch:distribution_work}
+
+As noted previously we assume distribution is essentially a solved problem or one that will be dealt with e.g. with Ethereum Swarm in order to limit the scope of the project.
+For testing, we kept a file locally that would be uploaded to the P2P cloud in the full implementation.
+This file was used to derive e.g. $\hash(\file)$ in the Solidity Contract integration testing code.
+
+\section{ZK Snark Work}\label{ch:zksnark_work}
+
+Unfortunately, due to time constraints, we were not able to implement the two ZK-snark generation functions, since such capabilities are not at present well supported by either libSnark or Solidity.
+
+Implementing $\zksnark_{dist}$ could potentially have been done, since its implementation could be in any language, however libSnark does not provide easy to use abstractions, especially and crucially those for AES. Hence implementing $\zksnark_{dist}$ would have required implementing AES in libSnark's r1cs constraint system: something somewhat out of scope of our abilities at present.
+
+Further, implementing $\zksnark_{auth}$ requires that the verifier run on-chain, i.e. in the Store smart contract, which requires integrating the zksnark C++ code with Solidity.
+While there are some work-in-progress frameworks for doing this, such as \href{https://github.com/JacobEberhardt/ZoKrates}{Zokrates}, we were not able to locate any with sufficiently advanced functionality to support $\hash$, much less RSA.
+
+We note that $\zksnark_{dist}$ is not strictly necessary for the guarantees the store provides, since the user has to trust that the file he is being given access to is the correct file.
+It sufficies to prove the key he receives hashes to the key associated with the file.
+This is to say that $\zksnark_{auth}$ would have sufficed for our purposes; but again, as there was no existing support for hashing or RSA, we would have had to reimplment $\hash$ and RSA in r1cs and in such a way as to be usable within the smart contract.
+
+\section{Future Directions} \label{ch:future}
+
+\nb for all future directions discussed, note that on-chain transactions and on-chain data storage is very expensive.
+This can be seen because "storage" on a blockchain is equivalent to that chain's state; and the state of a chain (including the account balances of all accounts the chain) is perhaps the most highly secured information storage medium available today.
+A simple calculation by \href{https://medium.com/@didil/off-chain-data-storage-ethereum-ipfs-570e030432cf}{Didil} reveals the cost of storing 1kB of data on the ethereum chain to be roughly 750,000 gas.
+At a 10 Gwei Gas price this works out to $\sim .008$ ether, or \$4.16 USD/kB at the current ETHUSD rate of 520.
+Hence storing large amounts of metadata on-chain is neither practical nor desirable from an economic perspective.
+
+\subsection{Reputation Systems to Resolve Trust Issues}
+The store in its current implementation has trust issues as outlined in \ref{ch:results}.
+
+\subsubsection{$\alice$'s Trust Issue}
+With regard to the problem of customers not being able to verify that they are being given access to what is advertised, it is certianly true that this issue cannot be resolved for the first legitimate customer who purchases some content $\file$.
+However, once one legitimate customer has purchased $\file$, they can attest to their satisfaction with what they received.
+Since the system provides the guarantee that customer purchases grant access to the same $\file$, whatever that $\file$ may be, a reputation system suffices to resolve $\alice$'s trust issue.
+
+This reputation system could be implemented naively on-chain with e.g. an additional metadata slot ($\sim$ uint trustScore) that is just the sum of the attestation scores of those who have purchased $\file$ ($-1$ for unsatisfied, or $1$ for satisfied).
+However, such a naive systems would still allow content owners to purchase $\file$ and leave fraudulent satisfaction scores.
+Since file purchases go directly to the owner, it costs the owner nothing (except transaction processing fees) to fraudently influence their files' trust scores.
+
+What is really needed is a PageRank-like algorithm that gives more weight to trust score inputs with purchases made from a variety of unrelated content owners.
+It is however a difficult problem to resolve since the mapping of real-owner $\rightarrow$ content owner address is unknown, and it costs nothing to create a new ethereum address that can act as a different owner.
+Users could also rely on third parties to `test' content to make sure it is legitimate, but then the system is no longer trustless.
+These remarks prompt us to reiterate Vitalik Buterin's observation that despite claims of trustlessness, blockchains rely much more on communal consensus for their durability than anyone would care to admit.
+
+It may in fact be the case that customers simply must trust that the party with which they are transacting is not attempting to defraud them.
+This would be worse case, since offers minimal improvement over existing systems such as the App Store.
+
+\subsubsection{$\bob$'s Trust Issue}
+Here it is not possible (or else it is computationally difficult) to use a reputation system since presumably a content owner $\bob$ has no way of knowing who leaked his content key K.
+
+In the worst case, $\bob$ would simply have to assume the key was going to be leaked, and rely on his customers goodwill to actually purchase his content.
+In some sense this is already the case with existing systems, since files can be distributed P2P through services such as Pirate Bay, however it is notably worse in this situation since $\bob$ himself is distributing the encrypted file, which would make prosecuting pirates very difficult.
+
+DRM of course is one solution for large files such as software applications (e.g. videogames).
+Another solution is to exclusively share $F_e$ and $\sigma_K$ with Alice directly, and only publish $\sigma_F$ (\ie encrypt $\file$ with a new key for each customer).
+The store maintains all of its guarantees in this configuration, but it would require actually implementing AES in $\zksnark_{dist}$.
+Since we were not able to complete the $\zksnark$ implementations, we don't have performance metrics for how long it takes to generate a proof.
+Presumably for large files it is computationally infeasible to be generating a new proof for each potential customer; this is of course the bottleneck in fully resolving $\bob$'s trust issue.
+
+\subsection{Anonymizing the \olp}
+
+As noted in \ref{ch:results}, our solution to the \crp implicitly resolves the \olp.
+Indeed, we include a function in the store smart contract that returns whether a given address has access rights to a particular $\sigma_F$.
+
+So far we have assumed that semi-anonymity (public transactions, but an unknown mapping: ETH Address $\rightarrow$ Individual) suffices for the store.
+We make the semi-anonymity acceptability assumption because all Ethereum transactions are public as are all smart contract transactions and smart contract state items.
+However, full anonymity of item hash licensees could be implemented programmatically e.g. with Ring Signatures; however this would also require mixers for transactions into the contract (it is unavoidable that the payment into the contract would be associated with a particular ETH address).
+
+We view this as an acceptable compromise since mixing can be somewhat achieved already either through Ring Signature mixing-smart-contracts or centralized exchange mixing by converting ether to "privacy" coins such as Monero and subsequently converting those privacy coins back to ether at another address.
+
+\subsection{Completing the ZKSnarks}
+
+As discussed in \ref{ch:zksnark_work}, we were not able to complete the implementation of the zksnarks since infrastructure for the operations we need the smart contract to execute is currently lacking in Solidity.
+To get all of the guarantees discussed in this paper we of course would need to implement both $\zksnark_{auth}$ and $\zksnark_{dist}$.
+Hence once Ethereum, Solidity, or Zokrates provides better support for ZKSnarks, both $\zksnark$s should be implemented.
+
+Note that Zokrates is actively working (as of 4/24) on implementing $\hash$ in their language.
+The main difficulty is as discussed computation and storage on the Ethereum network are very expensive.
+A single invocation of $\hash$ inside a zksnark function generates $\sim 27$K constraints in libSnark.
+At minimum we hope it turns out to be economically practical to verify $\zksnark_{auth}$ onchain; if the gas cost is too high, all of this is for naught.
+
+\subsection{Scalability}
+
+Currently the store is limited in scalability to the transaction processing capability of the Ethereum network.
+Future implementations could improve scalability by using improvements suggested in \cite{poon2017plasma}, once it is implemented into the Ethereum protocol later this year.
+
+\section{Conclusion} \label{ch:conclusion}
+
+We have presented in this paper an architecture and near-complete implementation of a decentralized online content store.
+Though various aspects of the trustlessness of the store proved potentially difficult or impossible to implement, we still believe such a system, even in the worst case, provides a valuable service.
+Increasingly, commerce is taking place online, and digital goods are becoming ever more important with each passing year.
+With the increase in importance of these digital commodities comes an increase in power of those third parties who control their distribution channels.
+
+Even if one believes such third parties to be perfectly benign, a number of issues still arise when they maintain absolute dominion over a distribution channel's content.
+The recent ad controversy with Youtube, for instance, has forced that company to take a stance regarding which videos are monetized, and which are not.
+Similarly, Apple decides what content is acceptable and which content should be censored from its App Store.
+
+One is reminded of Lord Acton's famous quote: ``absolute power corrupts absolutely.''
+We therefore view it as a definite good to increase the diffusion of power over digital content distribution through the creation of this decentralized content store.
+Even if all the power in this new system were consolidated in a single mining pool, it would still represent another channel through which content owners could potentially evade censorship and transact with their customer bases.
+
+\section{Acknowledgements}
+
+This paper was produced as part of \href{https://roxanageambasu.github.io/}{Roxana Geambasu's} Spring 2018 \textit{Advanced Distributed Systems} Course at Columbia University (\url{https://columbia.github.io/ds2-class/})
+
+\section{Availability}
+The source of this paper is maintained at \url{https://github.com/jmstenger/eth-bizaar-paper/}.
+
+\end{multicols}
+\bibliographystyle{plainnat}
+\bibliography{Biblio}
+
+\appendix
+\section{Terminology} \label{ch:Terminology}
+
+\begin{description}
+\item[address] An address, or `account' on a blockchain; here used to refer to an addresses on the Ethereum chain.
+
+\item[$\alice$] Alice: an ethereum address controlled by a customer seeking to purchase a file $\file$
+
+\item[$\bob$] Bob: an ethereum address controlled by the owner of a file $\file$
+
+\item[$\file$] A file made available for purchase through the store
+
+\item[$\key$] The symmetric key used to encrypt $\file$ in 256-bit AES: $F_e = \encrypt(\file, \key)$
+
+\item[$PK_A$] $\alice$'s public key for use in 2048-bit RSA encryption: $M_e = \encrypt(M, PK_A)$
+
+\item[$SK_A$] $\alice$'s secret key for use in 2048-bit RSA decryption: $M = \decrypt(M_e, SK_A)$
+
+\item[$\encrypt$] Either AES 256-bit encrypt: $\file_e = \encrypt(\file, \key)$, if used with a symmetric key $\key$, or RSA 2048-bit encrypt/decrypt, if used with $PK_A$ or $SK_A$.
+
+\item[$\decrypt$] AES 256-bit decrypt: $F = \decrypt(\file_e, \key)$
+
+\item[$\hash$] The solidity implementation of $\hash$ \ie keccak256()
+
+\item[$\filehash$] The $\hash$ of $\file$
+
+\item[$\keyhash$] The $\hash$ of $\key$
+
+\item[$\ether$] A unit of ether, the currency of the Ethereum Network. $1 \xi = 10^{18}$ wei.
+
+\item[$\zksnark$] A zksnark: a two-part algorithm comprising an algorithm for generating succinct proofs about a particular statement and an algorithm for verifying the veracity of such proofs non-interactively (\ie without exchanging messages with another party) such that the verifier learns nothing but the truth of the statement.
+Hence the name `Zero-Knowledge Succinct Non-Interactive Argument of Knowledge'.
+Strictly speaking the algorithm is actually tripartite, with a third algorithm for generating the `toxic waste' upon which all future proofs using the zksnark rely.
+ZCash, for instance, relies upon a single zksnark for anonymous transactions, and the running of this third algorithm was called the `parameter generation ceremony.'
+The Bizaar store therefore requires that two ceremonies be run prior to the system's launch: one for each $\zksnark$.
+
+\item[$\crp$] The problem of atomically exchanging $\ether$ for access to a file $\file$.
+
+\item[$\olp$] The (somewhat trivial) problem of recording those addresses with access to a file $\file$ on a ledger such as the Ethereum chain.
+\end{description}
+
+\appendix
+\end{document}
