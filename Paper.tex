@@ -178,15 +178,15 @@ The general architecture for our application was very similar to the one used fo
 \ie a web frontend written in React that connected to a variety of microservices through AWS API Gateway.
 
 We hosted the frontend on an AWS EC2 instance running an nginx server, but of course it could alternatively be hosted on S3 in the fashion described in the class assignments.
-Authentication for API gateway was handled using AWS IAM and Cognito, which we integrated with the frontend by using the react-cognito node package.
+Authentication for API gateway was handled using AWS IAM and Cognito, which we integrated with the frontend using the `react-cognito' node package.
 
 API gateway routed to three lambda functions which used a variety of other AWS services:
 
 \begin{itemize}
-  \item SQS -- Used to manage the runs of each experiment
-  \item S3 -- Saved the docker containers we generated for each configuration of the models
+  \item SQS -- Used to manage the runs and new EB version creation for each experiment
+  \item S3 -- Saved the docker containers we generated for each configuration of the models (and optionally hosted the frontend)
   \item Elastic Beanstalk -- Used to train and evaluate each model configuration as present in its respective docker container
-  \item Cloudwatch -- Used to schedule lambda functions which periodically pulled runs from SQS and executed them on EB
+  \item Cloudwatch -- Used to schedule lambda functions which periodically pulled runs from SQS and executed them on AWS EB
 \end{itemize}
 
 \subsection{Implementation Details} \label{ch:solidity_work}
