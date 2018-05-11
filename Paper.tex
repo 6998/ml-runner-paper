@@ -225,9 +225,8 @@ Used to handle communication and task queueing between \lfi, \lfii, and \lfiii.
   \item Cloudwatch -- Used to schedule lambda functions which periodically pulled runs from SQS and executed them on AWS EB
 \end{itemize}
 
-\subsection{Implementation Details} \label{ch:implementation}
-
 \end{multicols}
+\subsection{Implementation Details} \label{ch:implementation}
 \subsubsection{Frontend}
 We implemented a React front end which we deployed on an Nginx server on an AWS EC2 instance.
 Our front end made use of a number of frameworks including:
@@ -242,6 +241,7 @@ Our front end made use of a number of frameworks including:
 \end{itemize}
 
 We provided pages for logging in, registering, learning about the service, checking one's profile, viewing a dashboard, creating new experiments, and viewing and running experiments.
+The full frontend code is available at \url{https://github.com/6998/webapp}.
 
 \subsubsection{Backend: LF1}
 See \ref{code:lf1} for the full javascript code.
