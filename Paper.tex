@@ -95,7 +95,7 @@
 % Summary/Conclusion
 % Code Documentation
 
-\title{ML-Runner: A Scalable Cloud System for Machine \& Distributed Learning \\ {\smaller \textbf{Project Report \YellowPaperVersionNumber}}}
+\title{ML-Runner: A Scalable Cloud System for Machine \& Distributed Learning} %\\ {\smaller \textbf{Project Report \YellowPaperVersionNumber}}}
 \author{
     Barak Ben Noon (bb2762@columbia.edu) \\
     James Maxwell Stenger (jms2431@columbia.edu)
@@ -122,7 +122,7 @@ The platform subsequently trains and evaluates the model in each those of config
 
 \maketitle
 \setlength{\columnsep}{20pt}
-\begin{multicols}{2}
+%\begin{multicols}{2}
 
 % -------------- INTRODUCTION --------------
 % ------------------------------------------
@@ -159,7 +159,7 @@ API gateway routed to three lambda functions which used a variety of other AWS s
 
 \subsection{Implementation Details} \label{ch:solidity_work}
 
-\end{multicols}
+%\end{multicols}
 \subsubsection{Frontend}
 We implemented a React front end which we deployed on an Nginx server on an AWS EC2 instance.
 Our front end made use of a number of frameworks including:
@@ -184,7 +184,7 @@ See \ref{code:lf2} for the full javascript code.
 \subsubsection{Backend: LF3}
 See \ref{code:lf3} for the full javascript code.
 
-\begin{multicols}{2}
+%\begin{multicols}{2}
 % -------------- FUTURE DIRECTIONS --------------
 % -----------------------------------------------
 \section{Future Directions} \label{ch:future}
@@ -205,7 +205,7 @@ The source of this paper is maintained at \url{https://github.com/jmstenger/ml-r
 All project code can be found under the 6998 Organization at \url{https://github.com/6998}.
 See \ref{ch:code} for a walkthrough of the code.
 
-\end{multicols}
+%\end{multicols}
 \bibliographystyle{plainnat}
 \bibliography{Biblio}
 
@@ -620,10 +620,55 @@ The javascript code for LF3 is shown below; the full deployment package is avail
 The lambda code is contained there as `index.js'.
 
 \begin{Verbatim}[fontsize=\tiny, frame=single]
-  a
-\end{Verbatim}
+const AWS = require('aws-sdk');
+const sqs = new AWS.SQS({apiVersion: '2012-11-05'});
+const async = require('async');
+const fs = require('fs');
+const path = require('path');
+const s3 = new AWS.S3({apiVersion: '2006-03-01'});
+const randomstring = require("randomstring");
+const dynamoose = require('dynamoose');
+const elasticbeanstalk = new AWS.ElasticBeanstalk();
 
-In \ref{ch:future}, we outline how expensive on-chain storage is.
+exports.handler = (event, context, callback) => {
+  console.log( event)
+
+  const MessageAttributes = {
+    User: {
+      DataType: "String",
+      StringValue: event.user
+    },
+    ProjectName: {
+      DataType: "String",
+      StringValue: event.projectName
+    },
+    ProjectId: {
+      DataType: "String",
+      StringValue: event.projectId
+    },
+    S3key: {
+      DataType: "String",
+      StringValue: event.S3key
+    },
+  };
+
+  var params = {
+    DelaySeconds: 1,
+    MessageAttributes,
+    MessageBody: "Run",
+    QueueUrl: "https://sqs.us-east-1.amazonaws.com/906385631751/ml-runner"
+  };
+
+  sqs.sendMessage(params, function(err, data) {
+    if (err) {
+      console.log("sendMessage with sqs:", err);
+    } else {
+      console.log("added new run to the queue")
+    }
+    return callback(null, true);
+  });
+};
+\end{Verbatim}
 
 % -------------- TERMINOLOGY --------------
 % -----------------------------------------
